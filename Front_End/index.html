@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#3B6D11">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="NPC Canteen — order food and products with MTN or Airtel Mobile Money">
+  <title>NPC Canteen</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ── PAYMENT MODAL ──────────────────────────────────────────── -->
+<div id="paymentModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2 id="modalTitle">Pay with Mobile Money</h2>
+      <button class="modal-close" id="modalClose" aria-label="Close">✕</button>
+    </div>
+
+    <!-- Step 1: Enter phone -->
+    <div id="modalStep1" class="modal-step">
+      <p class="modal-amount" id="modalAmountText">Total: 0 RWF</p>
+      <label class="field-shell">
+        <span id="labelPhone">Phone Number</span>
+        <div class="phone-input-wrap">
+          <span class="phone-prefix">+250</span>
+          <input id="payPhoneInput" type="tel" placeholder="7XXXXXXXX" maxlength="9" inputmode="numeric">
+        </div>
+      </label>
+      <p class="field-hint" id="payPhoneHint"></p>
+      <button class="primary-btn" id="confirmPayBtn">Confirm &amp; Pay</button>
+    </div>
+
+    <!-- Step 2: Processing -->
+    <div id="modalStep2" class="modal-step hidden">
+      <div class="payment-processing">
+        <div class="payment-spinner"></div>
+        <p class="process-title" id="processingTitle">Sending push request…</p>
+        <p class="muted">Check your phone and approve the Mobile Money prompt.</p>
+      </div>
+    </div>
+
+    <!-- Step 3: Success -->
+    <div id="modalStep3" class="modal-step hidden">
+      <div class="payment-success">
+        <div class="result-icon result-icon--success">✓</div>
+        <h3>Payment Confirmed!</h3>
+        <p class="ref-code" id="confirmRefText">NPC-000000</p>
+        <p class="muted">Your order is confirmed. The trader has been notified.</p>
+        <button class="primary-btn" id="doneBtn">View My Orders</button>
+      </div>
+    </div>
+
+    <!-- Step 4: Failed -->
+    <div id="modalStep4" class="modal-step hidden">
+      <div class="payment-failed">
+        <div class="result-icon result-icon--fail">✕</div>
+        <h3 id="failTitle">Payment Failed</h3>
+        <p class="muted" id="failText">The payment was declined or timed out.</p>
+        <button class="primary-btn" id="retryBtn">Retry Payment</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── DEV SCREEN SWITCHER (remove in production) ────────────── -->
+<button id="toggleSwitcher" class="switcher-fab" aria-expanded="false">Views</button>
+<aside id="screenSwitcher" class="screen-switcher" aria-hidden="true">
+  <div class="switcher-head">
+    <h2>Screen Navigator</h2>
+    <button id="closeSwitcher" class="close-switcher">✕</button>
+  </div>
+  <div class="switcher-grid">
+    <button data-screen="landing" class="switch-btn">Landing</button>
+    <button data-screen="shop" class="switch-btn">Shop</button>
+    <button data-screen="cart" class="switch-btn">Cart</button>
+    <button data-screen="orders" class="switch-btn">My Orders</button>
+    <button data-screen="profile" class="switch-btn">Profile</button>
+    <button data-screen="trader-login" class="switch-btn">Trader Login</button>
+    <button data-screen="trader-overview" class="switch-btn">Trader Overview</button>
+    <button data-screen="trader-alerts" class="switch-btn">Trader Alerts</button>
+    <button data-screen="trader-transactions" class="switch-btn">Trader Trans.</button>
+    <button data-screen="trader-products" class="switch-btn">Trader Products</button>
+    <button data-screen="trader-export" class="switch-btn">Trader Export</button>
+    <button data-screen="admin-login" class="switch-btn">Admin Login</button>
+    <button data-screen="admin-overview" class="switch-btn">Admin Overview</button>
+    <button data-screen="admin-revenue" class="switch-btn">Admin Revenue</button>
+    <button data-screen="admin-users" class="switch-btn">Admin Users</button>
+    <button data-screen="admin-stock" class="switch-btn">Admin Stock</button>
+    <button data-screen="admin-system" class="switch-btn">Admin System</button>
+  </div>
+</aside>
+
+<main class="canvas">
+
+<!-- ═══════════════════════════════════════════════════════════
+     LANDING SCREEN
+═══════════════════════════════════════════════════════════ -->
+<section id="landing" class="screen active">
+  <header class="topbar">
+    <div class="brand-lockup">
+      <span class="brand-chip">NPC</span>
+      <div>
+        <p class="eyebrow">National Polytechnic College</p>
+        <h1 class="brand-name">NPC Canteen</h1>
+      </div>
+    </div>
+    <button class="lang-pill" id="langToggle">RW</button>
+  </header>
+
+  <section class="hero-panel">
+    <p class="eyebrow">Musanze, Northern Province, Rwanda</p>
+    <h2 data-i18n="heroTitle">Choose your access level.</h2>
+    <p class="muted" data-i18n="heroSub">Customer screens for ordering. Staff screens for management and analytics.</p>
+  </section>
+
+  <div class="portal-grid">
+    <!-- Customer -->
+    <article class="portal-card portal-card--green" data-link="shop">
+      <div class="portal-icon pi--green">CU</div>
+      <div class="portal-copy">
+        <span class="role-pill rp--green" data-i18n="roleCustomer">Customer</span>
+        <h3 data-i18n="cardTitleCustomer">Browse &amp; Order</h3>
+        <p class="muted" data-i18n="cardDescCustomer">Food, drinks, snacks, hygiene, stationery and electronics.</p>
+      </div>
+    </article>
+
+    <!-- Trader -->
+    <article class="portal-card portal-card--dark" data-link="trader-login" style="position:relative">
+      <span class="notif-dot notif-dot--red" id="traderDot" style="display:none"></span>
+      <div class="portal-icon pi--dark">TR</div>
+      <div class="portal-copy">
+        <span class="role-pill rp--dark" data-i18n="roleTrader">Trader</span>
+        <h3 data-i18n="cardTitleTrader">Manage Canteen</h3>
+        <p class="muted" data-i18n="cardDescTrader">Orders, real-time alerts, products and daily exports.</p>
+      </div>
+    </article>
+
+    <!-- Admin -->
+    <article class="portal-card portal-card--blue" data-link="admin-login" style="position:relative">
+      <span class="notif-dot notif-dot--red" id="adminDot" style="display:none"></span>
+      <div class="portal-icon pi--blue">AD</div>
+      <div class="portal-copy">
+        <span class="role-pill rp--blue" data-i18n="roleAdmin">Admin</span>
+        <h3 data-i18n="cardTitleAdmin">System Overview</h3>
+        <p class="muted" data-i18n="cardDescAdmin">Revenue analytics, users, stock levels and system health.</p>
+      </div>
+    </article>
+  </div>
+
+  <section class="landing-footer">
+    <article>
+      <span data-i18n="footerPayment">Payment</span>
+      <strong>MTN + Airtel</strong>
+    </article>
+    <article>
+      <span data-i18n="footerProducts">Products</span>
+      <strong id="landingProductCount">0 Items</strong>
+    </article>
+    <article>
+      <span data-i18n="footerPortals">Portals</span>
+      <strong>3 Dashboards</strong>
+    </article>
+  </section>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     CUSTOMER — SHOP
+═══════════════════════════════════════════════════════════ -->
+<section id="shop" class="screen">
+  <header class="topbar topbar--green">
+    <div class="header-copy">
+      <p class="eyebrow" data-i18n="customerDash">Customer Dashboard</p>
+      <h1 data-i18n="tabShop">Shop</h1>
+    </div>
+    <button class="soft-btn" data-link="landing" data-i18n="btnRole">Role</button>
+  </header>
+
+  <label class="field-shell search-shell">
+    <span data-i18n="labelSearch">Search</span>
+    <input id="shopSearch" type="search" data-i18n-placeholder="phSearch" placeholder="Search products…">
+  </label>
+
+  <div class="chip-row" id="shopCategories">
+    <button class="chip chip-active" data-cat="all" data-i18n="catAll">All</button>
+    <button class="chip" data-cat="food" data-i18n="catFood">Food</button>
+    <button class="chip" data-cat="drink" data-i18n="catDrinks">Drinks</button>
+    <button class="chip" data-cat="snack" data-i18n="catSnacks">Snacks</button>
+    <button class="chip" data-cat="hygiene" data-i18n="catHygiene">Hygiene</button>
+    <button class="chip" data-cat="stationery" data-i18n="catStationery">Stationery</button>
+    <button class="chip" data-cat="electronics" data-i18n="catElectronics">Electronics</button>
+  </div>
+
+  <div class="shop-insights" id="shopInsights"></div>
+
+  <section class="product-grid" id="productGrid"></section>
+
+  <!-- Floating cart bar -->
+  <div class="float-bar" id="floatBar" style="display:none">
+    <span id="floatCount" class="float-count"></span>
+    <button class="float-btn" id="floatBtn" data-link="cart">
+      <span data-i18n="viewCart">View Cart</span>
+      <strong id="floatTotal"></strong>
+    </button>
+  </div>
+
+  <nav class="bottom-nav customer-nav">
+    <button class="nav-btn nav-active" data-link="shop">
+      <span class="nav-icon">🛍</span>
+      <span data-i18n="tabShop">Shop</span>
+    </button>
+    <button class="nav-btn" data-link="cart" id="navCart">
+      <span class="nav-icon">🛒</span>
+      <span data-i18n="tabCart">Cart</span>
+    </button>
+    <button class="nav-btn" data-link="orders">
+      <span class="nav-icon">📋</span>
+      <span data-i18n="tabOrders">Orders</span>
+    </button>
+    <button class="nav-btn" data-link="profile">
+      <span class="nav-icon">👤</span>
+      <span data-i18n="tabProfile">Profile</span>
+    </button>
+  </nav>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     CUSTOMER — CART
+═══════════════════════════════════════════════════════════ -->
+<section id="cart" class="screen">
+  <header class="topbar topbar--green">
+    <div class="header-copy">
+      <p class="eyebrow" data-i18n="customerDash">Customer Dashboard</p>
+      <h1 data-i18n="tabCart">Cart</h1>
+    </div>
+    <button class="soft-btn" data-link="shop" data-i18n="btnBack">Back</button>
+  </header>
+
+  <section id="cartList" class="stack-list"></section>
+  <section id="cartSuggestions" class="stack-list compact-list"></section>
+
+  <div class="stack-card" id="checkoutPanel">
+    <div class="section-mini">
+      <h3 data-i18n="paymentMethod">Payment Method</h3>
+    </div>
+    <div class="pay-grid" id="paymentOptions">
+      <button class="pay-opt pay-opt-active" data-payment="mtn">
+        <span class="pay-logo mtn-logo">MTN</span>
+        <span data-i18n="mtnMoney">MTN Mobile Money</span>
+      </button>
+      <button class="pay-opt" data-payment="airtel">
+        <span class="pay-logo airtel-logo">AIRTEL</span>
+        <span data-i18n="airtelMoney">Airtel Money</span>
+      </button>
+    </div>
+
+    <div class="summary-card">
+      <div class="sum-row">
+        <span data-i18n="subtotal">Subtotal</span>
+        <strong id="subtotal">0 RWF</strong>
+      </div>
+      <div class="sum-row">
+        <span data-i18n="processingFee">Processing Fee</span>
+        <strong>50 RWF</strong>
+      </div>
+      <div class="sum-row sum-total">
+        <span data-i18n="grandTotal">Total</span>
+        <strong id="grandTotal">50 RWF</strong>
+      </div>
+    </div>
+    <button id="checkoutBtn" class="primary-btn" data-i18n="btnPay">Pay with Mobile Money</button>
+  </div>
+
+  <nav class="bottom-nav customer-nav">
+    <button class="nav-btn" data-link="shop">
+      <span class="nav-icon">🛍</span><span data-i18n="tabShop">Shop</span>
+    </button>
+    <button class="nav-btn nav-active" data-link="cart">
+      <span class="nav-icon">🛒</span><span data-i18n="tabCart">Cart</span>
+    </button>
+    <button class="nav-btn" data-link="orders">
+      <span class="nav-icon">📋</span><span data-i18n="tabOrders">Orders</span>
+    </button>
+    <button class="nav-btn" data-link="profile">
+      <span class="nav-icon">👤</span><span data-i18n="tabProfile">Profile</span>
+    </button>
+  </nav>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     CUSTOMER — MY ORDERS
+═══════════════════════════════════════════════════════════ -->
+<section id="orders" class="screen">
+  <header class="topbar topbar--green">
+    <div class="header-copy">
+      <p class="eyebrow" data-i18n="customerDash">Customer Dashboard</p>
+      <h1 data-i18n="tabOrders">My Orders</h1>
+    </div>
+    <button class="soft-btn" data-link="shop" data-i18n="btnShop">Shop</button>
+  </header>
+
+  <div class="section-head">
+    <h2 data-i18n="orderHistoryTitle">Order History</h2>
+    <p class="muted" data-i18n="orderHistorySub">Reference numbers and live payment status.</p>
+  </div>
+
+  <section id="ordersList" class="stack-list"></section>
+
+  <nav class="bottom-nav customer-nav">
+    <button class="nav-btn" data-link="shop">
+      <span class="nav-icon">🛍</span><span data-i18n="tabShop">Shop</span>
+    </button>
+    <button class="nav-btn" data-link="cart">
+      <span class="nav-icon">🛒</span><span data-i18n="tabCart">Cart</span>
+    </button>
+    <button class="nav-btn nav-active" data-link="orders">
+      <span class="nav-icon">📋</span><span data-i18n="tabOrders">Orders</span>
+    </button>
+    <button class="nav-btn" data-link="profile">
+      <span class="nav-icon">👤</span><span data-i18n="tabProfile">Profile</span>
+    </button>
+  </nav>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     CUSTOMER — PROFILE
+═══════════════════════════════════════════════════════════ -->
+<section id="profile" class="screen">
+  <header class="topbar topbar--green">
+    <div class="header-copy">
+      <p class="eyebrow" data-i18n="customerDash">Customer Dashboard</p>
+      <h1 data-i18n="tabProfile">Profile</h1>
+    </div>
+    <button class="soft-btn" data-link="shop" data-i18n="btnShop">Shop</button>
+  </header>
+
+  <div class="profile-hero">
+    <div class="profile-avatar">CU</div>
+    <div>
+      <h2 id="profileName">Walk-in Customer</h2>
+      <p class="muted" id="profilePhone">+250 7XX XXX XXX</p>
+      <span class="status-badge status-paid" data-i18n="verified">✓ Verified</span>
+    </div>
+  </div>
+
+  <div class="metric-grid">
+    <article class="metric-card">
+      <span data-i18n="totalSpend">Total Spend</span>
+      <strong id="profileSpend">0 RWF</strong>
+    </article>
+    <article class="metric-card">
+      <span data-i18n="totalOrders">Total Orders</span>
+      <strong id="profileOrders">0</strong>
+    </article>
+  </div>
+
+  <div class="stack-card">
+    <div class="pref-row">
+      <div>
+        <h3 data-i18n="smsNotif">SMS Notifications</h3>
+        <p class="muted" data-i18n="smsNotifDesc">Receive order updates via SMS</p>
+      </div>
+      <button class="toggle-pill toggle-on" id="smsToggle" data-i18n="toggleOn">ON</button>
+    </div>
+    <div class="pref-row">
+      <div>
+        <h3 data-i18n="language">Language</h3>
+        <p class="muted" data-i18n="langDesc">App display language</p>
+      </div>
+      <button class="lang-pill" id="profileLangToggle">RW</button>
+    </div>
+  </div>
+
+  <nav class="bottom-nav customer-nav">
+    <button class="nav-btn" data-link="shop">
+      <span class="nav-icon">🛍</span><span data-i18n="tabShop">Shop</span>
+    </button>
+    <button class="nav-btn" data-link="cart">
+      <span class="nav-icon">🛒</span><span data-i18n="tabCart">Cart</span>
+    </button>
+    <button class="nav-btn" data-link="orders">
+      <span class="nav-icon">📋</span><span data-i18n="tabOrders">Orders</span>
+    </button>
+    <button class="nav-btn nav-active" data-link="profile">
+      <span class="nav-icon">👤</span><span data-i18n="tabProfile">Profile</span>
+    </button>
+  </nav>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     TRADER — LOGIN
+═══════════════════════════════════════════════════════════ -->
+<section id="trader-login" class="screen screen--dark">
+  <header class="topbar topbar--dark">
+    <div class="header-copy">
+      <p class="eyebrow" data-i18n="traderAccess">Trader Access</p>
+      <h1 data-i18n="pinLogin">PIN Login</h1>
+    </div>
+    <button class="soft-btn soft-btn--dark" data-link="landing" data-i18n="btnBack">Back</button>
+  </header>
+
+  <div class="login-panel">
+    <div class="login-lock lock--dark">TR</div>
+    <h2 data-i18n="traderPinTitle">Secure trader entry</h2>
+    <p class="muted" data-i18n="traderPinSub">Enter your 4-digit PIN to access the canteen dashboard.</p>
+    <div class="pin-dots" id="traderPinDots">
+      <span></span><span></span><span></span><span></span>
+    </div>
+    <p class="pin-error hidden" id="traderPinError" data-i18n="wrongPin">Wrong PIN. Try again.</p>
+    <p class="pin-hint" data-i18n="traderPinHint">Default PIN: 1234</p>
+  </div>
+
+  <div class="keypad" id="traderKeypad">
+    <button data-key="1">1</button><button data-key="2">2</button><button data-key="3">3</button>
+    <button data-key="4">4</button><button data-key="5">5</button><button data-key="6">6</button>
+    <button data-key="7">7</button><button data-key="8">8</button><button data-key="9">9</button>
+    <span class="ghost-cell"></span><button data-key="0">0</button><button data-key="back">DEL</button>
+  </div>
+
+  <button class="text-link" data-link="landing" data-i18n="returnRole">← Return to role selection</button>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     TRADER — OVERVIEW
+═══════════════════════════════════════════════════════════ -->
+<section id="trader-overview" class="screen screen--dark">
+  <header class="topbar topbar--dark">
+    <div class="header-copy">
+      <p class="eyebrow" data-i18n="traderDash">Trader Dashboard</p>
+      <h1 data-i18n="tabOverview">Overview</h1>
+    </div>
+    <button class="soft-btn soft-btn--dark" id="traderSignOut" data-i18n="btnSignOut">Sign Out</button>
+  </header>
+
+  <div class="trader-hero">
+    <div>
+      <p class="eyebrow eyebrow--amber" data-i18n="todaySales">Today's Sales</p>
+      <h2 id="overviewSales" class="hero-revenue">0 RWF</h2>
+      <p class="muted" data-i18n="totalRevToday">Total revenue today</p>
+    </div>
+  </div>
+
+  <div class="metric-grid" id="overviewMetrics"></div>
+
+  <div class="stack-card card--dark">
+    <div class="section-mini">
+      <h3 data-i18n="recentOrders">Recent Orders</h3>
+    </div>
+    <div id="recentOrders" class="stack-list compact-list"></div>
+  </div>
+
+  <nav class="bottom-nav trader-nav">
+    <button class="nav-btn nav-active" data-link="trader-overview">
+      <span class="nav-icon">📊</span><span data-i18n="tabOverview">Overview</span>
+    </button>
+    <button class="nav-btn" data-link="trader-alerts" id="traderAlertsNavBtn">
+      <span class="nav-icon">🔔</span>
+      <span data-i18n="tabAlerts">Alerts</span>
+      <span class="nav-badge" id="alertBadge" style="display:none">0</span>
+    </button>
+    <button class="nav-btn" data-link="trader-transactions">
+      <span class="nav-icon">📄</span><span data-i18n="tabTransactions">Transactions</span>
+    </button>
+    <button class="nav-btn" data-link="trader-products">
+      <span class="nav-icon">📦</span><span data-i18n="tabProducts">Products</span>
+    </button>
+    <button class="nav-btn" data-link="trader-export">
+      <span class="nav-icon">📤</span><span data-i18n="tabExport">Export</span>
+    </button>
+  </nav>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     TRADER — ALERTS
+═══════════════════════════════════════════════════════════ -->
+<section id="trader-alerts" class="screen screen--dark">
+  <header class="topbar topbar--dark">
+    <div class="header-copy">
+      <p class="eyebrow" data-i18n="traderDash">Trader Dashboard</p>
+      <h1 data-i18n="tabAlerts">Alerts</h1>
+    </div>
+    <button class="soft-btn soft-btn--dark" id="clearAlerts" data-i18n="btnClearAll">Clear All</button>
+  </header>
+
+  <div class="section-head section-head--dark">
+    <h2 data-i18n="realtimeAlerts">Real-time Order Alerts</h2>
+    <p class="muted" data-i18n="alertsSub">New customer orders appear here instantly.</p>
+  </div>
+
+  <section id="alertsList" class="stack-list"></section>
+
+  <nav class="bottom-nav trader-nav">
+    <button class="nav-btn" data-link="trader-overview">
+      <span class="nav-icon">📊</span><span data-i18n="tabOverview">Overview</span>
+    </button>
+    <button class="nav-btn nav-active" data-link="trader-alerts">
+      <span class="nav-icon">🔔</span><span data-i18n="tabAlerts">Alerts</span>
+    </button>
+    <button class="nav-btn" data-link="trader-transactions">
+      <span class="nav-icon">📄</span><span data-i18n="tabTransactions">Transactions</span>
+    </button>
+    <button class="nav-btn" data-link="trader-products">
+      <span class="nav-icon">📦</span><span data-i18n="tabProducts">Products</span>
+    </button>
+    <button class="nav-btn" data-link="trader-export">
+      <span class="nav-icon">📤</span><span data-i18n="tabExport">Export</span>
+    </button>
+  </nav>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     TRADER — TRANSACTIONS
+═══════════════════════════════════════════════════════════ -->
+<section id="trader-transactions" class="screen screen--dark">
+  <header class="topbar topbar--dark">
+    <div class="header-copy">
+      <p class="eyebrow" data-i18n="traderDash">Trader Dashboard</p>
+      <h1 data-i18n="tabTransactions">Transactions</h1>
+    </div>
+    <button class="soft-btn soft-btn--dark" data-link="trader-overview" data-i18n="btnDash">Dash</button>
+  </header>
+
+  <label class="field-shell search-shell search-shell--dark">
+    <span data-i18n="labelSearch">Search</span>
+    <input id="transactionSearch" type="search" data-i18n-placeholder="phSearchTrans" placeholder="Phone or item name…">
+  </label>
+
+  <div class="chip-row" id="transactionFilters">
+    <button class="chip chip--dark chip-active" data-status="all" data-i18n="filterAll">All</button>
+    <button class="chip chip--dark" data-status="paid" data-i18n="filterPaid">Paid</button>
+    <button class="chip chip--dark" data-status="pending" data-i18n="filterPending">Pending</button>
+  </div>
+
+  <section id="transactionsList" class="stack-list"></section>
+
+  <nav class="bottom-nav trader-nav">
+    <button class="nav-btn" data-link="trader-overview">
+      <span class="nav-icon">📊</span><span data-i18n="tabOverview">Overview</span>
+    </button>
+    <button class="nav-btn" data-link="trader-alerts">
+      <span class="nav-icon">🔔</span><span data-i18n="tabAlerts">Alerts</span>
+    </button>
+    <button class="nav-btn nav-active" data-link="trader-transactions">
+      <span class="nav-icon">📄</span><span data-i18n="tabTransactions">Transactions</span>
+    </button>
+    <button class="nav-btn" data-link="trader-products">
+      <span class="nav-icon">📦</span><span data-i18n="tabProducts">Products</span>
+    </button>
+    <button class="nav-btn" data-link="trader-export">
+      <span class="nav-icon">📤</span><span data-i18n="tabExport">Export</span>
+    </button>
+  </nav>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     TRADER — PRODUCTS
+═══════════════════════════════════════════════════════════ -->
+<section id="trader-products" class="screen screen--dark">
+  <header class="topbar topbar--dark">
+    <div class="header-copy">
+      <p class="eyebrow" data-i18n="traderDash">Trader Dashboard</p>
+      <h1 data-i18n="tabProducts">Products</h1>
+    </div>
+    <button class="soft-btn soft-btn--dark" data-link="trader-overview" data-i18n="btnDash">Dash</button>
+  </header>
+
+  <div class="section-head section-head--dark">
+    <h2 data-i18n="productMgmt">Product Management</h2>
+    <p class="muted" data-i18n="productMgmtSub">Toggle visibility. Changes apply instantly to the customer shop.</p>
+  </div>
+
+  <section id="productManager" class="stack-list"></section>
+
+  <nav class="bottom-nav trader-nav">
+    <button class="nav-btn" data-link="trader-overview">
+      <span class="nav-icon">📊</span><span data-i18n="tabOverview">Overview</span>
+    </button>
+    <button class="nav-btn" data-link="trader-alerts">
+      <span class="nav-icon">🔔</span><span data-i18n="tabAlerts">Alerts</span>
+    </button>
+    <button class="nav-btn" data-link="trader-transactions">
+      <span class="nav-icon">📄</span><span data-i18n="tabTransactions">Transactions</span>
+    </button>
+    <button class="nav-btn nav-active" data-link="trader-products">
+      <span class="nav-icon">📦</span><span data-i18n="tabProducts">Products</span>
+    </button>
+    <button class="nav-btn" data-link="trader-export">
+      <span class="nav-icon">📤</span><span data-i18n="tabExport">Export</span>
+    </button>
+  </nav>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     TRADER — EXPORT
+═══════════════════════════════════════════════════════════ -->
+<section id="trader-export" class="screen screen--dark">
+  <header class="topbar topbar--dark">
+    <div class="header-copy">
+      <p class="eyebrow" data-i18n="traderDash">Trader Dashboard</p>
+      <h1 data-i18n="tabExport">Export</h1>
+    </div>
+    <button class="soft-btn soft-btn--dark" data-link="trader-overview" data-i18n="btnDash">Dash</button>
+  </header>
+
+  <div class="stack-card card--dark">
+    <div class="section-mini"><h3 data-i18n="dateRange">Date Range</h3></div>
+    <div class="chip-row" id="exportRange">
+      <button class="chip chip--dark chip-active" data-range="today" data-i18n="today">Today</button>
+      <button class="chip chip--dark" data-range="week" data-i18n="thisWeek">Week</button>
+      <button class="chip chip--dark" data-range="month" data-i18n="thisMonth">Month</button>
+      <button class="chip chip--dark" data-range="all" data-i18n="allTime">All</button>
+    </div>
+  </div>
+
+  <div class="stack-card card--dark">
+    <div class="section-mini"><h3 data-i18n="paymentStatus">Payment Status</h3></div>
+    <div class="chip-row" id="exportStatus">
+      <button class="chip chip--dark chip-active" data-status="all" data-i18n="filterAll">All</button>
+      <button class="chip chip--dark" data-status="paid" data-i18n="filterPaid">Paid</button>
+      <button class="chip chip--dark" data-status="pending" data-i18n="filterPending">Pending</button>
+    </div>
+  </div>
+
+  <div class="stack-card card--dark" id="exportPreview"></div>
+
+  <div class="export-actions">
+    <button class="export-btn export-csv" id="exportCSV" data-i18n="btnExportCSV">⬇ Export CSV</button>
+    <button class="export-btn export-pdf" id="exportPDF" data-i18n="btnExportPDF">⬇ Export PDF</button>
+    <button class="export-btn export-summary" id="exportSummary" data-i18n="btnExportSummary">Summary Report</button>
+  </div>
+
+  <nav class="bottom-nav trader-nav">
+    <button class="nav-btn" data-link="trader-overview">
+      <span class="nav-icon">📊</span><span data-i18n="tabOverview">Overview</span>
+    </button>
+    <button class="nav-btn" data-link="trader-alerts">
+      <span class="nav-icon">🔔</span><span data-i18n="tabAlerts">Alerts</span>
+    </button>
+    <button class="nav-btn" data-link="trader-transactions">
+      <span class="nav-icon">📄</span><span data-i18n="tabTransactions">Transactions</span>
+    </button>
+    <button class="nav-btn" data-link="trader-products">
+      <span class="nav-icon">📦</span><span data-i18n="tabProducts">Products</span>
+    </button>
+    <button class="nav-btn nav-active" data-link="trader-export">
+      <span class="nav-icon">📤</span><span data-i18n="tabExport">Export</span>
+    </button>
+  </nav>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     ADMIN — LOGIN
+═══════════════════════════════════════════════════════════ -->
+<section id="admin-login" class="screen screen--blue">
+  <header class="topbar topbar--blue">
+    <div class="header-copy">
+      <p class="eyebrow" data-i18n="adminAccess">Admin Access</p>
+      <h1 data-i18n="pinLogin">PIN Login</h1>
+    </div>
+    <button class="soft-btn soft-btn--blue" data-link="landing" data-i18n="btnBack">Back</button>
+  </header>
+
+  <div class="login-panel">
+    <div class="login-lock lock--blue">AD</div>
+    <h2 data-i18n="adminPinTitle">Management access</h2>
+    <p class="muted" data-i18n="adminPinSub">Enter your 4-digit admin PIN to access system analytics.</p>
+    <div class="pin-dots pin-dots--blue" id="adminPinDots">
+      <span></span><span></span><span></span><span></span>
+    </div>
+    <p class="pin-error hidden" id="adminPinError" data-i18n="wrongPin">Wrong PIN. Try again.</p>
+    <p class="pin-hint" data-i18n="adminPinHint">Default PIN: 5678</p>
+  </div>
+
+  <div class="keypad keypad--blue" id="adminKeypad">
+    <button data-key="1">1</button><button data-key="2">2</button><button data-key="3">3</button>
+    <button data-key="4">4</button><button data-key="5">5</button><button data-key="6">6</button>
+    <button data-key="7">7</button><button data-key="8">8</button><button data-key="9">9</button>
+    <span class="ghost-cell"></span><button data-key="0">0</button><button data-key="back">DEL</button>
+  </div>
+
+  <button class="text-link" data-link="landing" data-i18n="returnRole">← Return to role selection</button>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     ADMIN — OVERVIEW
+═══════════════════════════════════════════════════════════ -->
+<section id="admin-overview" class="screen screen--blue">
+  <header class="topbar topbar--blue">
+    <div class="header-copy">
+      <p class="eyebrow" data-i18n="adminDash">Admin Dashboard</p>
+      <h1 data-i18n="tabOverview">Overview</h1>
+    </div>
+    <button class="soft-btn soft-btn--blue" id="adminSignOut" data-i18n="btnSignOut">Sign Out</button>
+  </header>
+
+  <div class="admin-hero">
+    <div>
+      <p class="eyebrow eyebrow--blue" data-i18n="systemRevenue">System Revenue</p>
+      <h2 id="adminTotalRevenue" class="hero-revenue">0 RWF</h2>
+      <p class="muted" data-i18n="monthToDate">Month to date</p>
+    </div>
+  </div>
+
+  <div class="metric-grid" id="adminMetrics"></div>
+
+  <div class="stack-card card--blue">
+    <div class="section-mini"><h3 data-i18n="revByCategory">Revenue by Category</h3></div>
+    <div id="categoryChart" class="bar-chart"></div>
+  </div>
+
+  <nav class="bottom-nav admin-nav">
+    <button class="nav-btn nav-active" data-link="admin-overview">
+      <span class="nav-icon">📊</span><span data-i18n="tabOverview">Overview</span>
+    </button>
+    <button class="nav-btn" data-link="admin-revenue">
+      <span class="nav-icon">💰</span><span data-i18n="tabRevenue">Revenue</span>
+    </button>
+    <button class="nav-btn" data-link="admin-users">
+      <span class="nav-icon">👥</span><span data-i18n="tabUsers">Users</span>
+    </button>
+    <button class="nav-btn" data-link="admin-stock">
+      <span class="nav-icon">📦</span>
+      <span data-i18n="tabStock">Stock</span>
+      <span class="nav-badge nav-badge--red" id="stockBadge" style="display:none">!</span>
+    </button>
+    <button class="nav-btn" data-link="admin-system">
+      <span class="nav-icon">⚙️</span><span data-i18n="tabSystem">System</span>
+    </button>
+  </nav>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     ADMIN — REVENUE
+═══════════════════════════════════════════════════════════ -->
+<section id="admin-revenue" class="screen screen--blue">
+  <header class="topbar topbar--blue">
+    <div class="header-copy">
+      <p class="eyebrow" data-i18n="adminDash">Admin Dashboard</p>
+      <h1 data-i18n="tabRevenue">Revenue</h1>
+    </div>
+    <button class="soft-btn soft-btn--blue" data-link="admin-overview" data-i18n="btnDash">Dash</button>
+  </header>
+
+  <div class="stack-card card--blue">
+    <div class="section-mini"><h3 data-i18n="daily7dTitle">7-Day Revenue Trend</h3></div>
+    <div id="revenueChart" class="bar-chart"></div>
+  </div>
+
+  <div class="stack-card card--blue">
+    <div class="section-mini"><h3 data-i18n="topProducts">Top Selling Products</h3></div>
+    <div id="topProductsList" class="stack-list compact-list"></div>
+  </div>
+
+  <nav class="bottom-nav admin-nav">
+    <button class="nav-btn" data-link="admin-overview">
+      <span class="nav-icon">📊</span><span data-i18n="tabOverview">Overview</span>
+    </button>
+    <button class="nav-btn nav-active" data-link="admin-revenue">
+      <span class="nav-icon">💰</span><span data-i18n="tabRevenue">Revenue</span>
+    </button>
+    <button class="nav-btn" data-link="admin-users">
+      <span class="nav-icon">👥</span><span data-i18n="tabUsers">Users</span>
+    </button>
+    <button class="nav-btn" data-link="admin-stock">
+      <span class="nav-icon">📦</span><span data-i18n="tabStock">Stock</span>
+    </button>
+    <button class="nav-btn" data-link="admin-system">
+      <span class="nav-icon">⚙️</span><span data-i18n="tabSystem">System</span>
+    </button>
+  </nav>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     ADMIN — USERS
+═══════════════════════════════════════════════════════════ -->
+<section id="admin-users" class="screen screen--blue">
+  <header class="topbar topbar--blue">
+    <div class="header-copy">
+      <p class="eyebrow" data-i18n="adminDash">Admin Dashboard</p>
+      <h1 data-i18n="tabUsers">Users</h1>
+    </div>
+    <button class="soft-btn soft-btn--blue" data-link="admin-overview" data-i18n="btnDash">Dash</button>
+  </header>
+
+  <div class="section-head">
+    <h2 data-i18n="customerMgmt">Customer Management</h2>
+    <p class="muted" data-i18n="customerMgmtSub">Activity, order frequency and spend leaderboard.</p>
+  </div>
+
+  <div id="usersList" class="stack-list"></div>
+
+  <nav class="bottom-nav admin-nav">
+    <button class="nav-btn" data-link="admin-overview">
+      <span class="nav-icon">📊</span><span data-i18n="tabOverview">Overview</span>
+    </button>
+    <button class="nav-btn" data-link="admin-revenue">
+      <span class="nav-icon">💰</span><span data-i18n="tabRevenue">Revenue</span>
+    </button>
+    <button class="nav-btn nav-active" data-link="admin-users">
+      <span class="nav-icon">👥</span><span data-i18n="tabUsers">Users</span>
+    </button>
+    <button class="nav-btn" data-link="admin-stock">
+      <span class="nav-icon">📦</span><span data-i18n="tabStock">Stock</span>
+    </button>
+    <button class="nav-btn" data-link="admin-system">
+      <span class="nav-icon">⚙️</span><span data-i18n="tabSystem">System</span>
+    </button>
+  </nav>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     ADMIN — STOCK
+═══════════════════════════════════════════════════════════ -->
+<section id="admin-stock" class="screen screen--blue">
+  <header class="topbar topbar--blue">
+    <div class="header-copy">
+      <p class="eyebrow" data-i18n="adminDash">Admin Dashboard</p>
+      <h1 data-i18n="tabStock">Stock</h1>
+    </div>
+    <button class="soft-btn soft-btn--blue" data-link="admin-overview" data-i18n="btnDash">Dash</button>
+  </header>
+
+  <div class="section-head">
+    <h2 data-i18n="inventoryHealth">Inventory Health</h2>
+    <p class="muted" data-i18n="inventorySub">Low &lt;5 units · Medium 5–9 units · OK 10+ units</p>
+  </div>
+
+  <div class="chip-row" id="stockFilterChips">
+    <button class="chip chip--blue chip-active" data-sf="all" data-i18n="filterAll">All</button>
+    <button class="chip chip--blue" data-sf="low" data-i18n="stockLow">Low</button>
+    <button class="chip chip--blue" data-sf="medium" data-i18n="stockMedium">Medium</button>
+    <button class="chip chip--blue" data-sf="ok" data-i18n="stockOk">OK</button>
+  </div>
+
+  <div id="stockList" class="stack-list"></div>
+
+  <nav class="bottom-nav admin-nav">
+    <button class="nav-btn" data-link="admin-overview">
+      <span class="nav-icon">📊</span><span data-i18n="tabOverview">Overview</span>
+    </button>
+    <button class="nav-btn" data-link="admin-revenue">
+      <span class="nav-icon">💰</span><span data-i18n="tabRevenue">Revenue</span>
+    </button>
+    <button class="nav-btn" data-link="admin-users">
+      <span class="nav-icon">👥</span><span data-i18n="tabUsers">Users</span>
+    </button>
+    <button class="nav-btn nav-active" data-link="admin-stock">
+      <span class="nav-icon">📦</span><span data-i18n="tabStock">Stock</span>
+    </button>
+    <button class="nav-btn" data-link="admin-system">
+      <span class="nav-icon">⚙️</span><span data-i18n="tabSystem">System</span>
+    </button>
+  </nav>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     ADMIN — SYSTEM
+═══════════════════════════════════════════════════════════ -->
+<section id="admin-system" class="screen screen--blue">
+  <header class="topbar topbar--blue">
+    <div class="header-copy">
+      <p class="eyebrow" data-i18n="adminDash">Admin Dashboard</p>
+      <h1 data-i18n="tabSystem">System</h1>
+    </div>
+    <button class="soft-btn soft-btn--blue" data-link="admin-overview" data-i18n="btnDash">Dash</button>
+  </header>
+
+  <div class="section-head">
+    <h2 data-i18n="systemHealth">System Health</h2>
+    <p class="muted" data-i18n="systemHealthSub">Live monitoring of payment APIs, SMS gateway and database.</p>
+  </div>
+
+  <div id="systemHealthList" class="stack-list"></div>
+
+  <div class="stack-card card--blue">
+    <div class="section-mini"><h3 data-i18n="recentEvents">Recent Events</h3></div>
+    <div id="systemEventLog" class="stack-list compact-list"></div>
+  </div>
+
+  <nav class="bottom-nav admin-nav">
+    <button class="nav-btn" data-link="admin-overview">
+      <span class="nav-icon">📊</span><span data-i18n="tabOverview">Overview</span>
+    </button>
+    <button class="nav-btn" data-link="admin-revenue">
+      <span class="nav-icon">💰</span><span data-i18n="tabRevenue">Revenue</span>
+    </button>
+    <button class="nav-btn" data-link="admin-users">
+      <span class="nav-icon">👥</span><span data-i18n="tabUsers">Users</span>
+    </button>
+    <button class="nav-btn" data-link="admin-stock">
+      <span class="nav-icon">📦</span><span data-i18n="tabStock">Stock</span>
+    </button>
+    <button class="nav-btn nav-active" data-link="admin-system">
+      <span class="nav-icon">⚙️</span><span data-i18n="tabSystem">System</span>
+    </button>
+  </nav>
+</section>
+
+</main><!-- .canvas -->
+
+<script src="app.js"></script>
+</body>
+</html>

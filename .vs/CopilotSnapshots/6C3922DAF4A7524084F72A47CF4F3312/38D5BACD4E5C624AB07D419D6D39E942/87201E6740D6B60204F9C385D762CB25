@@ -1,0 +1,778 @@
+﻿const state = {
+  currentScreen: "portal",
+  pin: "",
+  selectedCategory: "all",
+  searchQuery: "",
+  paymentMethod: "MTN Mobile Money",
+  transactionQuery: "",
+  transactionFilter: "all",
+  exportRange: "today",
+  exportStatus: "all",
+  nextReference: 847400,
+  products: [],
+  cart: [
+    { productId: "chicken-plate", qty: 1 },
+    { productId: "juice-500", qty: 1 },
+    { productId: "isabuni", qty: 1 },
+  ],
+  orders: [],
+};
+
+const screens = [...document.querySelectorAll(".screen")];
+const switchButtons = [...document.querySelectorAll(".switch-btn")];
+const routeButtons = [...document.querySelectorAll("[data-link]")];
+const switcher = document.getElementById("screenSwitcher");
+const toggleSwitcherBtn = document.getElementById("toggleSwitcher");
+const closeSwitcherBtn = document.getElementById("closeSwitcher");
+const pinDots = [...document.querySelectorAll("#pinDots span")];
+const pinDotsWrap = document.getElementById("pinDots");
+
+function formatRwf(value) {
+  return `${Number(value).toLocaleString("en-US")} RWF`;
+}
+
+function getProduct(productId) {
+  return state.products.find((product) => product.id === productId);
+}
+
+function getCartItems() {
+  return state.cart
+    .map((entry) => {
+      const product = getProduct(entry.productId);
+      if (!product) return null;
+
+      return {
+        ...entry,
+        product,
+        total: product.price * entry.qty,
+      };
+    })
+    .filter(Boolean);
+}
+
+function getSubtotal() {
+  return getCartItems().reduce((sum, item) => sum + item.total, 0);
+}
+
+function getOrderItemsLabel(order) {
+  return order.items
+    .map((item) => {
+      const product = getProduct(item.productId);
+      if (!product) return `${item.qty} item`;
+      return `${product.name}${item.qty > 1 ? ` x${item.qty}` : ""}`;
+    })
+    .join(", ");
+}
+
+function getStatusClass(status) {
+  const normalized = status.toLowerCase();
+  if (normalized === "paid") return "paid";
+  if (normalized === "pending") return "pending";
+  return "new";
+}
+
+function getVisibleProducts() {
+  return state.products.filter((product) => {
+    const matchesEnabled = product.enabled;
+    const matchesCategory =
+      state.selectedCategory === "all" || product.category === state.selectedCategory;
+    const query = state.searchQuery.trim().toLowerCase();
+    const matchesQuery =
+      !query ||
+      product.name.toLowerCase().includes(query) ||
+      product.localName.toLowerCase().includes(query) ||
+      product.description.toLowerCase().includes(query);
+
+    return matchesEnabled && matchesCategory && matchesQuery;
+  });
+}
+
+function getOpenOrders() {
+  return state.orders.filter((order) => order.status !== "Paid");
+}
+
+function getFilteredTransactions() {
+  return state.orders.filter((order) => {
+    const query = state.transactionQuery.trim().toLowerCase();
+    const statusMatches =
+      state.transactionFilter === "all" ||
+      (state.transactionFilter === "paid" && order.status === "Paid") ||
+      (state.transactionFilter === "pending" && order.status !== "Paid");
+    const queryMatches =
+      !query ||
+      order.phone.toLowerCase().includes(query) ||
+      getOrderItemsLabel(order).toLowerCase().includes(query);
+
+    return statusMatches && queryMatches;
+  });
+}
+
+function getExportOrders() {
+  return state.orders.filter((order) => {
+    const rangeMatches =
+      state.exportRange === "month" ||
+      (state.exportRange === "week" && (order.period === "today" || order.period === "week")) ||
+      (state.exportRange === "today" && order.period === "today");
+
+    const statusMatches =
+      state.exportStatus === "all" ||
+      (state.exportStatus === "paid" && order.status === "Paid") ||
+      (state.exportStatus === "pending" && order.status !== "Paid");
+
+    return rangeMatches && statusMatches;
+  });
+}
+
+function getOverviewStats() {
+  const todayOrders = state.orders.filter((order) => order.period === "today");
+  const sourceOrders = todayOrders.length ? todayOrders : state.orders;
+  const totalSales = sourceOrders.reduce((sum, order) => sum + order.amount, 0);
+  const itemsSold = sourceOrders.reduce(
+    (sum, order) => sum + order.items.reduce((count, item) => count + item.qty, 0),
+    0
+  );
+  const averageOrder = sourceOrders.length ? Math.round(totalSales / sourceOrders.length) : 0;
+  const bestSellerMap = new Map();
+  const paymentMap = new Map();
+
+  sourceOrders.forEach((order) => {
+    paymentMap.set(order.payment, (paymentMap.get(order.payment) || 0) + 1);
+    order.items.forEach((item) => {
+      const product = getProduct(item.productId);
+      if (!product) return;
+      bestSellerMap.set(product.name, (bestSellerMap.get(product.name) || 0) + item.qty);
+    });
+  });
+
+  const bestSeller = [...bestSellerMap.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "-";
+  const topPayment = [...paymentMap.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "-";
+
+  return {
+    totalSales,
+    orderCount: sourceOrders.length,
+    itemsSold,
+    averageOrder,
+    bestSeller,
+    topPayment,
+  };
+}
+
+function setSwitcherOpen(isOpen) {
+  if (!switcher || !toggleSwitcherBtn) return;
+  switcher.classList.toggle("open", isOpen);
+  switcher.setAttribute("aria-hidden", String(!isOpen));
+  toggleSwitcherBtn.setAttribute("aria-expanded", String(isOpen));
+}
+
+function showScreen(screenId) {
+  state.currentScreen = screenId;
+
+  screens.forEach((screen) => {
+    screen.classList.toggle("active", screen.id === screenId);
+  });
+
+  switchButtons.forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.screen === screenId);
+  });
+
+  document.querySelectorAll(".bottom-nav button[data-link]").forEach((btn) => {
+    const parentScreen = btn.closest(".screen");
+    if (!parentScreen) return;
+
+    btn.classList.toggle(
+      "on",
+      btn.dataset.link === screenId && parentScreen.classList.contains("active")
+    );
+  });
+
+  window.location.hash = screenId;
+  setSwitcherOpen(false);
+}
+
+function renderShop() {
+  const productGrid = document.getElementById("productGrid");
+  const products = getVisibleProducts();
+
+  productGrid.innerHTML = products.length
+    ? products
+        .map(
+          (product) => `
+            <article class="product-card">
+              <div class="product-art ${product.artClass}"></div>
+              <div class="product-meta">
+                <div>
+                  <h3 class="product-name">${product.name}</h3>
+                  <p class="product-sub">${product.localName}</p>
+                </div>
+                <strong>${formatRwf(product.price)}</strong>
+              </div>
+              <p>${product.description}</p>
+              <div class="card-actions">
+                <button class="secondary-btn" type="button">${product.category}</button>
+                <button class="primary-btn add-to-cart" type="button" data-product-id="${product.id}">
+                  + Add
+                </button>
+              </div>
+            </article>
+          `
+        )
+        .join("")
+    : `<div class="empty-state">No visible products match this filter. Enable more products in Trader Products.</div>`;
+
+  const cartCount = state.cart.reduce((sum, item) => sum + item.qty, 0);
+  document.querySelectorAll('.customer-nav button[data-link="cart"]').forEach((button) => {
+    button.textContent = cartCount ? `Cart (${cartCount})` : "Cart";
+  });
+}
+
+function renderCart() {
+  const cartList = document.getElementById("cartList");
+  const cartItems = getCartItems();
+  const subtotal = getSubtotal();
+  const total = subtotal + 50;
+
+  cartList.innerHTML = cartItems.length
+    ? cartItems
+        .map(
+          (item) => `
+            <article class="cart-card">
+              <div class="cart-thumb ${item.product.artClass}"></div>
+              <div class="cart-copy">
+                <div class="product-meta">
+                  <div>
+                    <h3>${item.product.name}</h3>
+                    <p>${item.product.localName}</p>
+                  </div>
+                  <strong>${formatRwf(item.product.price)}</strong>
+                </div>
+                <div class="qty-wrap">
+                  <button class="qty-btn" type="button" data-cart-product="${item.product.id}" data-change="-1">-</button>
+                  <span class="qty-badge">${item.qty}</span>
+                  <button class="qty-btn" type="button" data-cart-product="${item.product.id}" data-change="1">+</button>
+                </div>
+              </div>
+            </article>
+          `
+        )
+        .join("")
+    : `<div class="empty-state">Your cart is empty. Add products from the customer home screen.</div>`;
+
+  document.getElementById("subtotal").textContent = formatRwf(subtotal);
+  document.getElementById("total").textContent = formatRwf(total);
+
+  document.querySelectorAll(".pay-option").forEach((button) => {
+    button.classList.toggle("active", button.dataset.payment === state.paymentMethod);
+  });
+}
+
+function renderOrders() {
+  const ordersList = document.getElementById("ordersList");
+
+  ordersList.innerHTML = state.orders.length
+    ? state.orders
+        .map(
+          (order) => `
+            <article class="order-card">
+              <div class="topline">
+                <div>
+                  <h3>${order.reference}</h3>
+                  <p>${getOrderItemsLabel(order)}</p>
+                </div>
+                <div class="status-row">
+                  <strong class="table-price">${formatRwf(order.amount)}</strong>
+                  <span class="status-badge status-${getStatusClass(order.status)}">${order.status}</span>
+                </div>
+              </div>
+              <div class="bottomline">
+                <p>${order.payment}</p>
+                <p>${order.time}</p>
+              </div>
+            </article>
+          `
+        )
+        .join("")
+    : `<div class="empty-state">No orders yet. Checkout from the cart to create the first one.</div>`;
+}
+
+function renderOverview() {
+  const metrics = document.getElementById("overviewMetrics");
+  const recentOrders = document.getElementById("recentOrders");
+  const stats = getOverviewStats();
+
+  document.getElementById("overviewSales").textContent = formatRwf(stats.totalSales);
+  document.getElementById("bestSeller").textContent = stats.bestSeller;
+  document.getElementById("topPayment").textContent = stats.topPayment;
+
+  metrics.innerHTML = `
+    <article class="metric-card">
+      <span>Total orders</span>
+      <strong>${stats.orderCount}</strong>
+    </article>
+    <article class="metric-card">
+      <span>Items sold</span>
+      <strong>${stats.itemsSold}</strong>
+    </article>
+    <article class="metric-card">
+      <span>Average order</span>
+      <strong>${formatRwf(stats.averageOrder)}</strong>
+    </article>
+    <article class="metric-card">
+      <span>Open orders</span>
+      <strong>${getOpenOrders().length}</strong>
+    </article>
+  `;
+
+  recentOrders.innerHTML = state.orders
+    .slice(0, 4)
+    .map(
+      (order) => `
+        <article class="transaction-row">
+          <div class="topline">
+            <div>
+              <h3>${order.reference}</h3>
+              <p>${getOrderItemsLabel(order)}</p>
+            </div>
+            <span class="table-badge table-${getStatusClass(order.status)}">${order.status}</span>
+          </div>
+          <div class="bottomline">
+            <p>${order.time}</p>
+            <strong class="table-price">${formatRwf(order.amount)}</strong>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderAlerts() {
+  const alertsList = document.getElementById("alertsList");
+  const newOrders = state.orders.filter((order) => order.status === "New");
+
+  alertsList.innerHTML = newOrders.length
+    ? newOrders
+        .map(
+          (order) => `
+            <article class="alert-card new-alert">
+              <div class="topline">
+                <div>
+                  <span class="status-badge status-new">NEW</span>
+                  <h3>${order.reference}</h3>
+                </div>
+                <strong class="table-price">${formatRwf(order.amount)}</strong>
+              </div>
+              <p>${getOrderItemsLabel(order)}</p>
+              <div class="bottomline">
+                <p>${order.time}</p>
+                <p>${order.phone}</p>
+              </div>
+              <div class="alert-actions">
+                <button class="secondary-btn" type="button" data-alert-action="pending" data-reference="${order.reference}">
+                  Hold
+                </button>
+                <button class="primary-btn" type="button" data-alert-action="paid" data-reference="${order.reference}">
+                  Mark as Paid
+                </button>
+              </div>
+            </article>
+          `
+        )
+        .join("")
+    : `<div class="empty-state">No new alerts. Fresh customer checkouts will appear here.</div>`;
+}
+
+function renderTransactions() {
+  const list = document.getElementById("transactionsList");
+  const rows = getFilteredTransactions();
+
+  list.innerHTML = rows.length
+    ? rows
+        .map(
+          (order) => `
+            <article class="transaction-row">
+              <div class="topline">
+                <div>
+                  <span class="table-tag">${order.customer}</span>
+                  <h3>${order.phone}</h3>
+                </div>
+                <strong class="table-price">${formatRwf(order.amount)}</strong>
+              </div>
+              <p>${getOrderItemsLabel(order)}</p>
+              <div class="bottomline">
+                <p>${order.time}</p>
+                <span class="table-badge table-${getStatusClass(order.status)}">${order.status}</span>
+              </div>
+            </article>
+          `
+        )
+        .join("")
+    : `<div class="empty-state">No transactions match this search and filter combination.</div>`;
+}
+
+function renderProductManager() {
+  const productManager = document.getElementById("productManager");
+
+  productManager.innerHTML = state.products
+    .map(
+      (product) => `
+        <article class="manager-card">
+          <div class="topline">
+            <div class="product-meta">
+              <div class="cart-thumb ${product.artClass}"></div>
+              <div>
+                <h3>${product.name}</h3>
+                <p>${formatRwf(product.price)} · Stock ${product.stock}</p>
+              </div>
+            </div>
+            <button
+              class="toggle-pill ${product.enabled ? "on" : "off"}"
+              type="button"
+              data-product-toggle="${product.id}"
+            >
+              ${product.enabled ? "ON" : "OFF"}
+            </button>
+          </div>
+          <p>${product.localName}</p>
+          <div class="manager-actions">
+            <button class="secondary-btn" type="button" data-product-edit="${product.id}">Edit Price</button>
+            <button class="primary-btn" type="button" data-product-boost="${product.id}">Restock +5</button>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderExportPreview() {
+  const preview = document.getElementById("exportPreview");
+  const exportOrders = getExportOrders();
+  const totalRevenue = exportOrders.reduce((sum, order) => sum + order.amount, 0);
+  const paidCount = exportOrders.filter((order) => order.status === "Paid").length;
+  const openCount = exportOrders.length - paidCount;
+
+  preview.innerHTML = `
+    <div class="section-mini">
+      <div>
+        <h3>Preview</h3>
+        <p class="muted">Filtered summary before PDF or CSV export.</p>
+      </div>
+    </div>
+    <div class="stack-list compact-list">
+      <article class="metric-card">
+        <span>Orders</span>
+        <strong>${exportOrders.length}</strong>
+      </article>
+      <article class="metric-card">
+        <span>Revenue</span>
+        <strong>${formatRwf(totalRevenue)}</strong>
+      </article>
+      <article class="metric-card">
+        <span>Paid</span>
+        <strong>${paidCount}</strong>
+      </article>
+      <article class="metric-card">
+        <span>Open</span>
+        <strong>${openCount}</strong>
+      </article>
+    </div>
+  `;
+}
+
+function renderAll() {
+  renderShop();
+  renderCart();
+  renderOrders();
+  renderOverview();
+  renderAlerts();
+  renderTransactions();
+  renderProductManager();
+  renderExportPreview();
+}
+
+function updatePinDots() {
+  pinDots.forEach((dot, index) => {
+    dot.classList.toggle("filled", index < state.pin.length);
+  });
+}
+
+function resetPin(isError = false) {
+  state.pin = "";
+  updatePinDots();
+
+  if (isError && pinDotsWrap) {
+    pinDotsWrap.classList.add("error");
+    window.setTimeout(() => pinDotsWrap.classList.remove("error"), 300);
+  }
+}
+
+function addToCart(productId) {
+  const existing = state.cart.find((item) => item.productId === productId);
+
+  if (existing) {
+    existing.qty += 1;
+  } else {
+    state.cart.push({ productId, qty: 1 });
+  }
+
+  renderAll();
+  showScreen("cart");
+}
+
+function updateCartQuantity(productId, delta) {
+  const item = state.cart.find((entry) => entry.productId === productId);
+  if (!item) return;
+
+  item.qty += delta;
+
+  if (item.qty <= 0) {
+    state.cart = state.cart.filter((entry) => entry.productId !== productId);
+  }
+
+  renderAll();
+}
+
+function createOrderFromCart() {
+  const cartItems = getCartItems();
+  if (!cartItems.length) {
+    window.alert("Your cart is empty.");
+    return;
+  }
+
+  const reference = `NPC-${state.nextReference}`;
+  state.nextReference += 1;
+
+  state.orders.unshift({
+    reference,
+    customer: "Walk-in Customer",
+    phone: "0780000000",
+    items: cartItems.map((item) => ({ productId: item.product.id, qty: item.qty })),
+    amount: getSubtotal() + 50,
+    status: "New",
+    time: "Just now",
+    period: "today",
+    payment: state.paymentMethod,
+  });
+
+  state.cart = [];
+  renderAll();
+  showScreen("orders");
+}
+
+function updateOrderStatus(reference, nextStatus) {
+  const order = state.orders.find((entry) => entry.reference === reference);
+  if (!order) return;
+
+  order.status = nextStatus;
+  renderAll();
+
+  if (nextStatus === "Paid") {
+    showScreen("trader-transactions");
+  }
+}
+
+function clearAlerts() {
+  state.orders.forEach((order) => {
+    if (order.status === "New") {
+      order.status = "Pending";
+    }
+  });
+
+  renderAll();
+}
+
+function editProductPrice(productId) {
+  const product = getProduct(productId);
+  if (!product) return;
+
+  const nextValue = window.prompt(`Enter new price for ${product.name}`, String(product.price));
+  if (!nextValue) return;
+
+  const parsed = Number(nextValue);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    window.alert("Please enter a valid positive number.");
+    return;
+  }
+
+  product.price = parsed;
+  renderAll();
+}
+
+function toggleProduct(productId) {
+  const product = getProduct(productId);
+  if (!product) return;
+
+  product.enabled = !product.enabled;
+  renderAll();
+}
+
+function restockProduct(productId) {
+  const product = getProduct(productId);
+  if (!product) return;
+
+  product.stock += 5;
+  renderAll();
+}
+
+const initialHash = window.location.hash.replace("#", "");
+if (initialHash && screens.some((screen) => screen.id === initialHash)) {
+  state.currentScreen = initialHash;
+}
+
+switchButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    showScreen(button.dataset.screen);
+  });
+});
+
+routeButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const nextScreen = button.dataset.link;
+    if (nextScreen) showScreen(nextScreen);
+  });
+});
+
+toggleSwitcherBtn?.addEventListener("click", () => {
+  setSwitcherOpen(!switcher?.classList.contains("open"));
+});
+
+closeSwitcherBtn?.addEventListener("click", () => setSwitcherOpen(false));
+
+document.getElementById("shopSearch")?.addEventListener("input", (event) => {
+  state.searchQuery = event.target.value;
+  renderShop();
+});
+
+document.getElementById("shopCategories")?.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-category]");
+  if (!button) return;
+
+  state.selectedCategory = button.dataset.category || "all";
+
+  document.querySelectorAll("#shopCategories .chip").forEach((chip) => {
+    chip.classList.toggle("active", chip === button);
+  });
+
+  renderShop();
+});
+
+document.getElementById("productGrid")?.addEventListener("click", (event) => {
+  const button = event.target.closest(".add-to-cart");
+  if (!button) return;
+  addToCart(button.dataset.productId);
+});
+
+document.getElementById("cartList")?.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-cart-product]");
+  if (!button) return;
+
+  updateCartQuantity(button.dataset.cartProduct, Number(button.dataset.change || 0));
+});
+
+document.getElementById("paymentOptions")?.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-payment]");
+  if (!button) return;
+
+  state.paymentMethod = button.dataset.payment;
+  renderCart();
+});
+
+document.getElementById("checkoutBtn")?.addEventListener("click", createOrderFromCart);
+
+document.getElementById("clearAlerts")?.addEventListener("click", clearAlerts);
+
+document.getElementById("alertsList")?.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-alert-action]");
+  if (!button) return;
+
+  const reference = button.dataset.reference;
+  const action = button.dataset.alertAction;
+
+  if (action === "paid") updateOrderStatus(reference, "Paid");
+  if (action === "pending") updateOrderStatus(reference, "Pending");
+});
+
+document.getElementById("transactionSearch")?.addEventListener("input", (event) => {
+  state.transactionQuery = event.target.value;
+  renderTransactions();
+});
+
+document.getElementById("transactionFilters")?.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-status]");
+  if (!button) return;
+
+  state.transactionFilter = button.dataset.status || "all";
+  document.querySelectorAll("#transactionFilters .chip").forEach((chip) => {
+    chip.classList.toggle("active", chip === button);
+  });
+  renderTransactions();
+});
+
+document.getElementById("productManager")?.addEventListener("click", (event) => {
+  const toggleButton = event.target.closest("button[data-product-toggle]");
+  if (toggleButton) {
+    toggleProduct(toggleButton.dataset.productToggle);
+    return;
+  }
+
+  const editButton = event.target.closest("button[data-product-edit]");
+  if (editButton) {
+    editProductPrice(editButton.dataset.productEdit);
+    return;
+  }
+
+  const restockButton = event.target.closest("button[data-product-boost]");
+  if (restockButton) {
+    restockProduct(restockButton.dataset.productBoost);
+  }
+});
+
+document.getElementById("exportRange")?.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-range]");
+  if (!button) return;
+
+  state.exportRange = button.dataset.range || "today";
+  document.querySelectorAll("#exportRange .chip").forEach((chip) => {
+    chip.classList.toggle("active", chip === button);
+  });
+  renderExportPreview();
+});
+
+document.getElementById("exportStatus")?.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-status]");
+  if (!button) return;
+
+  state.exportStatus = button.dataset.status || "all";
+  document.querySelectorAll("#exportStatus .chip").forEach((chip) => {
+    chip.classList.toggle("active", chip === button);
+  });
+  renderExportPreview();
+});
+
+document.getElementById("keypad")?.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-key]");
+  if (!button) return;
+
+  const key = button.dataset.key;
+  if (key === "back") {
+    state.pin = state.pin.slice(0, -1);
+    updatePinDots();
+    return;
+  }
+
+  if (state.pin.length >= 4) return;
+  state.pin += key;
+  updatePinDots();
+
+  if (state.pin.length === 4) {
+    window.setTimeout(() => {
+      if (state.pin === "1234") {
+        resetPin();
+        showScreen("trader-overview");
+      } else {
+        resetPin(true);
+      }
+    }, 180);
+  }
+});
+
+renderAll();
+showScreen(state.currentScreen);
