@@ -34,7 +34,7 @@ jobs:
         run: flutter pub get
 
       - name: Build web for Pages
-        run: flutter build web --release --base-href /npc_canteen/
+        run: flutter build web --release --base-href /npc_canteen/ --no-wasm-dry-run
 
       - name: Add .nojekyll
         run: touch build/web/.nojekyll
