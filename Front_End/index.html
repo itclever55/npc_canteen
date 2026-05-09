@@ -919,6 +919,29 @@
 
 </main><!-- .canvas -->
 
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {
+        // Silently ignore registration failures on unsupported hosts.
+      });
+    });
+  }
+
+  let deferredInstallPrompt = null;
+  window.addEventListener('beforeinstallprompt', event => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+  });
+
+  window.addEventListener('keydown', async event => {
+    if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'i' && deferredInstallPrompt) {
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+    }
+  });
+</script>
 <script src="app.js"></script>
 </body>
 </html>
